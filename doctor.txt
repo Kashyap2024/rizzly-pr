@@ -1,0 +1,16 @@
+Running 17 checks on your project...
+15/17 checks passed. 2 checks failed. Possible issues detected:
+Use the --verbose flag to see more details about passed checks.
+
+Γ£û Check dependencies for packages that should not be installed directly
+The package "@expo/metro-config" should not be installed directly in your project. You should instead use "expo/metro-config" which is a sub-export of the expo package.
+Advice:
+Remove these packages from your package.json.
+
+Γ£û Check that required peer dependencies are installed
+Missing peer dependency: react-native-worklets
+Required by: react-native-reanimated
+Advice:
+Install missing required peer dependency with "npx expo install react-native-worklets"
+Your app may crash outside of Expo Go without this dependency. Native module peer dependencies must be installed directly.
+
