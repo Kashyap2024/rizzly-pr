@@ -11,16 +11,21 @@ import Background from "../components/Background";
 import Glow from "../components/Glow";
 import GradientText from "../components/GradientText";
 import { BlurView } from "expo-blur";
+import { useAuth } from "../contexts/AuthContext";
 
 type HomeScreenRouteProp = RouteProp<RootStackParamList, 'Home'>;
 
 export default function HomeScreen() {
+    const { profile } = useAuth();
     const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
     const route = useRoute<HomeScreenRouteProp>();
-    const { name, gender } = route.params || { name: "Alex", gender: "Male" };
+
+    // Prioritize context profile, fallback to route params or default
+    const name = profile?.display_name || route.params?.name || "Alex";
+    const gender = profile?.gender || route.params?.gender || "Male";
 
     // Use local assets based on gender
-    const avatarSource = gender === 'Female'
+    const avatarSource = (gender.toLowerCase() === 'female' || gender.toLowerCase() === 'woman')
         ? require('../../assets/avatar_female.png')
         : require('../../assets/avatar_male.png');
 
@@ -122,7 +127,7 @@ export default function HomeScreen() {
                 </ScrollView>
 
                 {/* Bottom Navigation */}
-                <View className="absolute bottom-20 left-0 right-0 px-12 z-20">
+                <View className="absolute bottom-12 left-0 right-0 px-12 z-20">
                     <BlurView
                         intensity={50}
                         tint="dark"

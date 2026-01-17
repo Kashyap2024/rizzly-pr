@@ -4,6 +4,7 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    "**/*.d.ts"
+    "**/*.d.ts",
+    "nativewind-env.d.ts"
   ]
 }

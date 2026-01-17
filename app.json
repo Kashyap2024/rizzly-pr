@@ -4,7 +4,7 @@
     "slug": "Rizzly",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/rizzly-logo.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#191022",
     "newArchEnabled": true,
@@ -14,16 +14,26 @@
       "backgroundColor": "#191022"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.rizzly.app"
     },
     "android": {
+      "package": "com.rizzly.app",
       "backgroundColor": "#191022",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/rizzly-logo.png",
         "backgroundColor": "#191022"
       },
       "edgeToEdgeEnabled": true
     },
+    "plugins": [
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.328163150430-ao65dnplbg4910bdnpvurdlsekk0354b"
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     }

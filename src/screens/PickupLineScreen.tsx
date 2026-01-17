@@ -1,5 +1,5 @@
-import React, { useState, useRef } from "react";
-import { View, Text, TouchableOpacity, ScrollView, Switch, Pressable, PanResponder } from "react-native";
+import React, { useState, useRef, useEffect } from "react";
+import { View, Text, TouchableOpacity, ScrollView, Switch, Pressable, PanResponder, TextInput, NativeSyntheticEvent, TextInputScrollEventData } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -7,6 +7,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../types";
 import Background from "../components/Background";
 import { BlurView } from "expo-blur";
+import { useAuth } from "../contexts/AuthContext";
 
 const VIBES = [
     { id: 'default', label: 'Default', icon: 'auto-awesome' },
@@ -17,18 +18,43 @@ const VIBES = [
     { id: 'teasing', label: 'Teasing', icon: null },
 ];
 
+const MALE_PLACEHOLDERS = [
+    "She likes hiking and dogs, say something funny",
+    "She has a travel blog and loves Italian food",
+    "Professional coffee taster and rock climber"
+];
+
+const FEMALE_PLACEHOLDERS = [
+    "He's a big fan of Star Wars and plays guitar",
+    "Passionate about photography and exploration",
+    "Loves early morning runs and matcha lattes"
+];
+
 type Props = NativeStackScreenProps<RootStackParamList, 'PickupLine'>;
 
 export default function PickupLineScreen({ navigation }: Props) {
+    const { profile } = useAuth();
     const [flatteryLevel, setFlatteryLevel] = useState(75);
     const [includeEmojis, setIncludeEmojis] = useState(true);
     const [selectedVibe, setSelectedVibe] = useState('default');
+    const [context, setContext] = useState("");
+    const [placeholderText, setPlaceholderText] = useState("");
+    const [placeholderIndex, setPlaceholderIndex] = useState(0);
+    const [charIndex, setCharIndex] = useState(0);
+    const [isDeleting, setIsDeleting] = useState(false);
 
-    // Use a ref for slider width to avoid stale closures in PanResponder without re-creating it
+    // Scrollbar state
+    const [contentHeight, setContentHeight] = useState(0);
+    const [containerHeight, setContainerHeight] = useState(120);
+    const [scrollY, setScrollY] = useState(0);
+
+    const userGender = profile?.gender?.toLowerCase() || 'other';
+    const activePlaceholders = (userGender === 'man' || userGender === 'male')
+        ? MALE_PLACEHOLDERS
+        : FEMALE_PLACEHOLDERS;
+
     const sliderWidthRef = useRef(0);
 
-    // Create PanResponder once using a ref. 
-    // It reads the current sliderWidth from sliderWidthRef.current
     const panResponder = useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => true,
@@ -50,6 +76,45 @@ export default function PickupLineScreen({ navigation }: Props) {
         })
     ).current;
 
+    useEffect(() => {
+        const typingSpeed = isDeleting ? 25 : 45;
+        const pauseDelay = 1500;
+
+        const currentFullText = activePlaceholders[placeholderIndex % activePlaceholders.length];
+
+        const handleTyping = () => {
+            if (!isDeleting) {
+                if (charIndex < currentFullText.length) {
+                    setPlaceholderText(currentFullText.substring(0, charIndex + 1));
+                    setCharIndex(charIndex + 1);
+                } else {
+                    setTimeout(() => setIsDeleting(true), pauseDelay);
+                }
+            } else {
+                if (charIndex > 0) {
+                    setPlaceholderText(currentFullText.substring(0, charIndex - 1));
+                    setCharIndex(charIndex - 1);
+                } else {
+                    setIsDeleting(false);
+                    setPlaceholderIndex((prev) => (prev + 1) % activePlaceholders.length);
+                }
+            }
+        };
+
+        const timeout = setTimeout(handleTyping, typingSpeed);
+        return () => clearTimeout(timeout);
+    }, [charIndex, isDeleting, placeholderIndex, activePlaceholders]);
+
+    const handleScroll = (event: NativeSyntheticEvent<TextInputScrollEventData>) => {
+        setScrollY(event.nativeEvent.contentOffset.y);
+    };
+
+    // Calculate scrollbar thumb position
+    const showScrollbar = contentHeight > containerHeight;
+    const scrollbarHeight = containerHeight;
+    const thumbHeight = Math.max(30, (containerHeight / contentHeight) * scrollbarHeight);
+    const thumbOffset = (scrollY / (contentHeight - containerHeight)) * (scrollbarHeight - thumbHeight);
+
     return (
         <View className="flex-1 bg-background-dark relative">
             <StatusBar style="light" />
@@ -61,7 +126,7 @@ export default function PickupLineScreen({ navigation }: Props) {
                 tint="dark"
                 className="absolute top-0 left-0 right-0 z-50 pt-12 pb-4 px-4 flex-row items-center justify-between overflow-hidden"
                 style={{
-                    backgroundColor: 'rgba(25, 16, 34, 0.7)', // Semi-transparent background-dark (#191022)
+                    backgroundColor: 'rgba(25, 16, 34, 0.7)',
                     borderBottomWidth: 1,
                     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
                 }}
@@ -76,7 +141,56 @@ export default function PickupLineScreen({ navigation }: Props) {
                 <View className="w-10" />
             </BlurView>
 
-            <ScrollView className="flex-1 pt-32 px-4 pb-8" contentContainerStyle={{ paddingBottom: 200 }} showsVerticalScrollIndicator={false}>
+            <ScrollView
+                className="flex-1 pt-32 px-4 pb-8"
+                contentContainerStyle={{ paddingBottom: 200 }}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+            >
+
+                {/* Person Context Input */}
+                <View className="mb-6">
+                    <Text className="text-gray-400 text-xs font-space-bold uppercase tracking-widest mb-4 px-1">Describe the Person</Text>
+                    <View className="bg-surface-dark rounded-[1.5rem] p-5 border border-white/5 relative overflow-hidden">
+                        <View style={{ flexDirection: 'row' }}>
+                            <TextInput
+                                value={context}
+                                onChangeText={setContext}
+                                placeholder={placeholderText}
+                                placeholderTextColor="rgba(156, 163, 175, 0.4)"
+                                multiline
+                                onContentSizeChange={(e) => setContentHeight(e.nativeEvent.contentSize.height)}
+                                onScroll={handleScroll}
+                                className="text-white font-space-medium text-base text-left align-top flex-1"
+                                style={{
+                                    minHeight: 80,
+                                    maxHeight: 120, // Limit height to trigger scroll
+                                    textAlignVertical: 'top'
+                                }}
+                                scrollEnabled={true}
+                            />
+                            {/* Custom Scrollbar */}
+                            {showScrollbar && (
+                                <View
+                                    className="absolute right-0 top-0 bottom-0 w-1 bg-white/5 rounded-full overflow-hidden"
+                                    style={{ height: 120 }}
+                                >
+                                    <View
+                                        className="w-full bg-primary/40 rounded-full"
+                                        style={{
+                                            height: thumbHeight,
+                                            transform: [{ translateY: thumbOffset || 0 }]
+                                        }}
+                                    />
+                                </View>
+                            )}
+                        </View>
+                        <View className="flex-row items-center gap-2 mt-3 pt-3 border-t border-white/5">
+                            <MaterialIcons name="info-outline" size={14} color="#6b7280" />
+                            <Text className="text-[10px] text-gray-500 font-space-regular">More details = Better Rizz</Text>
+                        </View>
+                    </View>
+                </View>
 
                 {/* Tone Customization */}
                 <View className="mb-6">
@@ -144,13 +258,10 @@ export default function PickupLineScreen({ navigation }: Props) {
                                     <Pressable
                                         key={vibe.id}
                                         onPress={() => setSelectedVibe(vibe.id)}
-                                        // Use static className for base styles
                                         className="h-10 px-6 rounded-full flex-row items-center gap-2 border"
-                                        // Use style prop for dynamic styles to bypass NativeWind re-processing issues
                                         style={{
                                             backgroundColor: isSelected ? '#7f13ec' : 'rgba(255, 255, 255, 0.05)',
                                             borderColor: isSelected ? '#7f13ec' : 'rgba(255, 255, 255, 0.1)',
-                                            // shadow is harder to do inline, simplifying for test
                                         }}
                                     >
                                         {isSelected && (
