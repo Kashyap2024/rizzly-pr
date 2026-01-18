@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { View, Text, TouchableOpacity, ScrollView, Switch, Pressable, PanResponder, TextInput, NativeSyntheticEvent, TextInputScrollEventData } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, Pressable, PanResponder, TextInput, NativeSyntheticEvent, TextInputScrollEventData } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -35,13 +35,15 @@ type Props = NativeStackScreenProps<RootStackParamList, 'PickupLine'>;
 export default function PickupLineScreen({ navigation }: Props) {
     const { profile } = useAuth();
     const [flatteryLevel, setFlatteryLevel] = useState(75);
-    const [includeEmojis, setIncludeEmojis] = useState(true);
+    const [emojiMode, setEmojiMode] = useState<'relevant' | 'on' | 'off'>('relevant');
     const [selectedVibe, setSelectedVibe] = useState('default');
     const [context, setContext] = useState("");
     const [placeholderText, setPlaceholderText] = useState("");
     const [placeholderIndex, setPlaceholderIndex] = useState(0);
     const [charIndex, setCharIndex] = useState(0);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [cardFeedback, setCardFeedback] = useState<{ [key: number]: 'like' | 'dislike' | null }>({});
+    const [showThankYou, setShowThankYou] = useState<{ [key: number]: boolean }>({});
 
     // Scrollbar state
     const [contentHeight, setContentHeight] = useState(0);
@@ -104,6 +106,16 @@ export default function PickupLineScreen({ navigation }: Props) {
         const timeout = setTimeout(handleTyping, typingSpeed);
         return () => clearTimeout(timeout);
     }, [charIndex, isDeleting, placeholderIndex, activePlaceholders]);
+
+    const handleFeedback = (id: number, type: 'like' | 'dislike') => {
+        setCardFeedback(prev => ({ ...prev, [id]: type }));
+        setShowThankYou(prev => ({ ...prev, [id]: true }));
+
+        // Auto-hide thank you message after 2 seconds
+        setTimeout(() => {
+            setShowThankYou(prev => ({ ...prev, [id]: false }));
+        }, 2000);
+    };
 
     const handleScroll = (event: NativeSyntheticEvent<TextInputScrollEventData>) => {
         setScrollY(event.nativeEvent.contentOffset.y);
@@ -231,19 +243,36 @@ export default function PickupLineScreen({ navigation }: Props) {
                     </View>
                 </View>
 
-                {/* Include Emojis */}
+                {/* Emoji Selection */}
                 <View className="mb-6">
-                    <View className="bg-surface-dark rounded-full px-5 h-16 border border-white/5 flex-row items-center justify-between">
-                        <View className="flex-row items-center gap-3">
-                            <MaterialIcons name="sentiment-satisfied" size={24} color="#9ca3af" />
-                            <Text className="text-base font-space-medium text-white">Include Emojis</Text>
-                        </View>
-                        <Switch
-                            value={includeEmojis}
-                            onValueChange={setIncludeEmojis}
-                            trackColor={{ false: "#374151", true: "#7f13ec" }}
-                            thumbColor={"#fff"}
-                        />
+                    <Text className="text-gray-400 text-xs font-space-bold uppercase tracking-widest mb-4 px-1">Emoji Preference</Text>
+                    <View className="bg-surface-dark rounded-[1.5rem] p-2 border border-white/5 flex-row">
+                        {[
+                            { id: 'relevant', label: 'Default', icon: 'auto-awesome' },
+                            { id: 'on', label: 'On', icon: 'sentiment-satisfied' },
+                            { id: 'off', label: 'Off', icon: 'block' }
+                        ].map((option) => {
+                            const isSelected = emojiMode === option.id;
+                            return (
+                                <TouchableOpacity
+                                    key={option.id}
+                                    onPress={() => setEmojiMode(option.id as any)}
+                                    className="flex-1 py-3 items-center justify-center rounded-2xl flex-row gap-2"
+                                    style={{
+                                        backgroundColor: isSelected ? 'rgba(127, 19, 236, 1)' : 'transparent',
+                                    }}
+                                >
+                                    <MaterialIcons
+                                        name={option.icon as any}
+                                        size={16}
+                                        color={isSelected ? 'white' : '#9ca3af'}
+                                    />
+                                    <Text className={`text-xs font-space-bold ${isSelected ? 'text-white' : 'text-gray-400'}`}>
+                                        {option.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
                     </View>
                 </View>
 
@@ -314,25 +343,83 @@ export default function PickupLineScreen({ navigation }: Props) {
 
                     {/* Result Card 1 */}
                     <TouchableOpacity className="group relative bg-surface-dark border border-white/10 rounded-2xl p-4 active:border-primary/40 transition-colors">
-                        <View className="flex-row justify-between items-start gap-3">
-                            <Text className="text-sm leading-relaxed text-gray-200 flex-1 font-space-regular">
-                                "Do you have a name, or can I call you mine?" <Text>😉</Text>
-                            </Text>
-                            <TouchableOpacity className="shrink-0 p-2 rounded-lg bg-white/5 active:bg-primary/20 active:text-primary">
-                                <MaterialIcons name="content-copy" size={18} color="#9ca3af" />
-                            </TouchableOpacity>
+                        <View className="flex-col gap-4">
+                            <View className="flex-row justify-between items-start gap-3">
+                                <Text className="text-sm leading-relaxed text-gray-200 flex-1 font-space-regular">
+                                    "Do you have a name, or can I call you mine?" <Text>😉</Text>
+                                </Text>
+                                <TouchableOpacity className="shrink-0 p-2 rounded-lg bg-white/5 active:bg-primary/20">
+                                    <MaterialIcons name="content-copy" size={18} color="#9ca3af" />
+                                </TouchableOpacity>
+                            </View>
+
+                            {(!cardFeedback[0] || showThankYou[0]) && (
+                                <View className="flex-row items-center h-10">
+                                    {showThankYou[0] ? (
+                                        <View className="animate-fade-in flex-row items-center gap-2">
+                                            <MaterialIcons name="check-circle" size={14} color="#4ade80" />
+                                            <Text className="text-[10px] font-space-bold text-green-400">Thank you for feedback!</Text>
+                                        </View>
+                                    ) : (
+                                        <View className="flex-row items-center gap-2">
+                                            <TouchableOpacity
+                                                onPress={() => handleFeedback(0, 'like')}
+                                                className={`p-2 rounded-full border ${cardFeedback[0] === 'like' ? 'bg-green-500/20 border-green-500/50' : 'bg-white/5 border-white/5'}`}
+                                            >
+                                                <MaterialIcons name="thumb-up" size={16} color={cardFeedback[0] === 'like' ? '#4ade80' : '#9ca3af'} />
+                                            </TouchableOpacity>
+
+                                            <TouchableOpacity
+                                                onPress={() => handleFeedback(0, 'dislike')}
+                                                className={`p-2 rounded-full border ${cardFeedback[0] === 'dislike' ? 'bg-red-500/20 border-red-500/50' : 'bg-white/5 border-white/5'}`}
+                                            >
+                                                <MaterialIcons name="thumb-down" size={16} color={cardFeedback[0] === 'dislike' ? '#f87171' : '#9ca3af'} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    )}
+                                </View>
+                            )}
                         </View>
                     </TouchableOpacity>
 
                     {/* Result Card 2 */}
                     <TouchableOpacity className="group relative bg-surface-dark border border-white/10 rounded-2xl p-4 active:border-primary/40 transition-colors">
-                        <View className="flex-row justify-between items-start gap-3">
-                            <Text className="text-sm leading-relaxed text-gray-200 flex-1 font-space-regular">
-                                "Are you a magician? Because whenever I look at you, everyone else disappears." <Text>✨</Text>
-                            </Text>
-                            <TouchableOpacity className="shrink-0 p-2 rounded-lg bg-white/5 active:bg-primary/20 active:text-primary">
-                                <MaterialIcons name="content-copy" size={18} color="#9ca3af" />
-                            </TouchableOpacity>
+                        <View className="flex-col gap-4">
+                            <View className="flex-row justify-between items-start gap-3">
+                                <Text className="text-sm leading-relaxed text-gray-200 flex-1 font-space-regular">
+                                    "Are you a magician? Because whenever I look at you, everyone else disappears." <Text>✨</Text>
+                                </Text>
+                                <TouchableOpacity className="shrink-0 p-2 rounded-lg bg-white/5 active:bg-primary/20">
+                                    <MaterialIcons name="content-copy" size={18} color="#9ca3af" />
+                                </TouchableOpacity>
+                            </View>
+
+                            {(!cardFeedback[1] || showThankYou[1]) && (
+                                <View className="flex-row items-center h-10">
+                                    {showThankYou[1] ? (
+                                        <View className="animate-fade-in flex-row items-center gap-2">
+                                            <MaterialIcons name="check-circle" size={14} color="#4ade80" />
+                                            <Text className="text-[10px] font-space-bold text-green-400">Thank you for feedback!</Text>
+                                        </View>
+                                    ) : (
+                                        <View className="flex-row items-center gap-2">
+                                            <TouchableOpacity
+                                                onPress={() => handleFeedback(1, 'like')}
+                                                className={`p-2 rounded-full border ${cardFeedback[1] === 'like' ? 'bg-green-500/20 border-green-500/50' : 'bg-white/5 border-white/5'}`}
+                                            >
+                                                <MaterialIcons name="thumb-up" size={16} color={cardFeedback[1] === 'like' ? '#4ade80' : '#9ca3af'} />
+                                            </TouchableOpacity>
+
+                                            <TouchableOpacity
+                                                onPress={() => handleFeedback(1, 'dislike')}
+                                                className={`p-2 rounded-full border ${cardFeedback[1] === 'dislike' ? 'bg-red-500/20 border-red-500/50' : 'bg-white/5 border-white/5'}`}
+                                            >
+                                                <MaterialIcons name="thumb-down" size={16} color={cardFeedback[1] === 'dislike' ? '#f87171' : '#9ca3af'} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    )}
+                                </View>
+                            )}
                         </View>
                     </TouchableOpacity>
                 </View>
