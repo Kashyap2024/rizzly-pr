@@ -14,6 +14,11 @@ import { VibeSelector, Vibe } from "../components/VibeSelector";
 import { FlatterySlider } from "../components/FlatterySlider";
 import { ActionButton } from "../components/ActionButton";
 import { RizzCard } from "../components/RizzCard";
+import { apiService } from "../services/api";
+import { supabase } from "../lib/supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { historyService } from "../services/historyService";
+import { sessionService } from "../services/sessionService";
 
 const VIBES: Vibe[] = [
     { id: 'default', label: 'Default', icon: 'auto-awesome' },
@@ -48,15 +53,40 @@ export default function PickupLineScreen({ navigation }: Props) {
     const [placeholderIndex, setPlaceholderIndex] = useState(0);
     const [charIndex, setCharIndex] = useState(0);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [cardFeedback, setCardFeedback] = useState<{ [key: number]: 'like' | 'dislike' | null }>({});
-    const [showThankYou, setShowThankYou] = useState<{ [key: number]: boolean }>({});
+    const [cardFeedback, setCardFeedback] = useState<{ [key: string]: 'like' | 'dislike' | null }>({});
+    const [showThankYou, setShowThankYou] = useState<{ [key: string]: boolean }>({});
+    const [results, setResults] = useState<{ text: string, history_id: string, server_id: string }[]>(
+        sessionService.getResults('Pickup Line').map(r => ({ text: r.text, history_id: r.id, server_id: r.serverId }))
+    );
+    const [isLoading, setIsLoading] = useState(false);
 
     // Scrollbar state
     const [contentHeight, setContentHeight] = useState(0);
     const [containerHeight, setContainerHeight] = useState(120);
     const [scrollY, setScrollY] = useState(0);
+    const [overrideTargetGender, setOverrideTargetGender] = useState<string | null>(null);
 
     const userGender = profile?.gender?.toLowerCase() || 'other';
+    const oppositeGender = overrideTargetGender || ((userGender === 'man' || userGender === 'male') ? 'Woman' : 'Man');
+
+    useEffect(() => {
+        const loadDefaults = async () => {
+            try {
+                const saved = await AsyncStorage.getItem('rizz_defaults');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (parsed.vibe) setSelectedVibe(parsed.vibe);
+                    if (parsed.flattery) setFlatteryLevel(parsed.flattery);
+                    if (parsed.emoji) setEmojiMode(parsed.emoji);
+                    if (parsed.targetGender) setOverrideTargetGender(parsed.targetGender);
+                }
+            } catch (e) {
+                console.error("Load defaults error", e);
+            }
+        };
+        loadDefaults();
+    }, []);
+
     const activePlaceholders = (userGender === 'man' || userGender === 'male')
         ? MALE_PLACEHOLDERS
         : FEMALE_PLACEHOLDERS;
@@ -90,13 +120,72 @@ export default function PickupLineScreen({ navigation }: Props) {
         return () => clearTimeout(timeout);
     }, [charIndex, isDeleting, placeholderIndex, activePlaceholders]);
 
-    const handleFeedback = (id: number, type: 'like' | 'dislike') => {
-        setCardFeedback(prev => ({ ...prev, [id]: type }));
-        setShowThankYou(prev => ({ ...prev, [id]: true }));
+    const handleGenerate = async () => {
+        if (!context.trim()) return;
+
+        setIsLoading(true);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.access_token) throw new Error("Not authenticated");
+
+            const formattedPrompt = `Person Description: ${context}
+Give me reply for ${oppositeGender}
+- Flittering: ${flatteryLevel}%
+- Emoji: ${emojiMode}
+- Tone: ${selectedVibe}`;
+
+            const res = await apiService.generateRizz({
+                type: 'text',
+                prompt: formattedPrompt
+            }, session.access_token);
+
+            // Save to local history
+            const localItem = await historyService.saveHistory({
+                text: res.rizz,
+                type: 'Pickup Line',
+                settings: {
+                    vibe: selectedVibe,
+                    flattery: flatteryLevel,
+                    emoji: emojiMode,
+                    targetGender: oppositeGender
+                }
+            });
+
+            // Save to session service
+            sessionService.addResult({
+                id: localItem.id,
+                serverId: res.history_id, // Store actual server ID
+                text: localItem.text,
+                type: 'Pickup Line'
+            });
+
+            setResults(prev => [{ text: localItem.text, history_id: localItem.id, server_id: res.history_id }, ...prev]);
+        } catch (error) {
+            console.error("Generation failed:", error);
+            // Add error toast or message here
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleFeedback = async (serverId: string, localId: string, feedback: 'like' | 'dislike') => {
+        // UI state uses local mapping
+        setCardFeedback(prev => ({ ...prev, [localId]: feedback }));
+        setShowThankYou(prev => ({ ...prev, [localId]: true }));
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.access_token) {
+                // Backend uses real history_id
+                await apiService.provideFeedback(serverId, feedback, session.access_token);
+            }
+        } catch (error) {
+            console.error("Feedback failed:", error);
+        }
 
         // Auto-hide thank you message after 2 seconds
         setTimeout(() => {
-            setShowThankYou(prev => ({ ...prev, [id]: false }));
+            setShowThankYou(prev => ({ ...prev, [localId]: false }));
         }, 2000);
     };
 
@@ -191,32 +280,32 @@ export default function PickupLineScreen({ navigation }: Props) {
                 </View>
 
                 {/* Generate Button */}
-                <ActionButton label="Generate Rizz" onPress={() => { }} />
+                <ActionButton
+                    label={isLoading ? "Generating..." : "Generate Rizz"}
+                    onPress={handleGenerate}
+                />
 
                 {/* Results Section */}
-                <View className="space-y-4 gap-4">
-                    <View className="flex-row items-center justify-between px-1">
-                        <Text className="text-gray-400 text-xs font-space-bold uppercase tracking-widest">Generated Results</Text>
-                        <View className="bg-primary/20 px-2 py-0.5 rounded-full">
-                            <Text className="text-[10px] text-primary-light font-bold">2 NEW</Text>
+                <View className="space-y-4 gap-4 mt-8">
+                    {results.length > 0 && (
+                        <View className="flex-row items-center justify-between px-1">
+                            <Text className="text-gray-400 text-xs font-space-bold uppercase tracking-widest">Generated Results</Text>
+                            <View className="bg-primary/20 px-2 py-0.5 rounded-full">
+                                <Text className="text-[10px] text-primary-light font-bold">{results.length} NEW</Text>
+                            </View>
                         </View>
-                    </View>
+                    )}
 
-                    <RizzCard
-                        text="Do you have a name, or can I call you mine? 😉"
-                        onCopy={() => { }}
-                        feedbackStatus={cardFeedback[0]}
-                        showThankYou={showThankYou[0]}
-                        onFeedback={(type) => handleFeedback(0, type)}
-                    />
-
-                    <RizzCard
-                        text="Are you a magician? Because whenever I look at you, everyone else disappears. ✨"
-                        onCopy={() => { }}
-                        feedbackStatus={cardFeedback[1]}
-                        showThankYou={showThankYou[1]}
-                        onFeedback={(type) => handleFeedback(1, type)}
-                    />
+                    {results.map((result, index) => (
+                        <RizzCard
+                            key={result.history_id}
+                            text={result.text}
+                            onCopy={() => { }}
+                            feedbackStatus={cardFeedback[result.history_id]}
+                            showThankYou={showThankYou[result.history_id]}
+                            onFeedback={(type) => handleFeedback(result.server_id, result.history_id, type)}
+                        />
+                    ))}
                 </View>
 
             </ScrollView>

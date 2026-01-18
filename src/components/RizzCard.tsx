@@ -7,7 +7,7 @@ export interface RizzCardProps {
     onCopy: () => void;
     feedbackStatus?: 'like' | 'dislike' | null;
     showThankYou?: boolean;
-    onFeedback: (type: 'like' | 'dislike') => void;
+    onFeedback?: (type: 'like' | 'dislike') => void;
 }
 
 export const RizzCard: React.FC<RizzCardProps> = ({
@@ -35,7 +35,7 @@ export const RizzCard: React.FC<RizzCardProps> = ({
                     </TouchableOpacity>
                 </View>
 
-                {(!feedbackStatus || showThankYou) && (
+                {onFeedback && (!feedbackStatus || showThankYou) && (
                     <View className="flex-row items-center h-10">
                         {showThankYou ? (
                             <View className="animate-fade-in flex-row items-center gap-2">
@@ -45,14 +45,14 @@ export const RizzCard: React.FC<RizzCardProps> = ({
                         ) : (
                             <View className="flex-row items-center gap-2">
                                 <TouchableOpacity
-                                    onPress={() => onFeedback('like')}
+                                    onPress={() => onFeedback?.('like')}
                                     className={`p-2 rounded-full border ${feedbackStatus === 'like' ? 'bg-green-500/20 border-green-500/50' : 'bg-white/5 border-white/5'}`}
                                 >
                                     <MaterialIcons name="thumb-up" size={16} color={feedbackStatus === 'like' ? '#4ade80' : '#9ca3af'} />
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
-                                    onPress={() => onFeedback('dislike')}
+                                    onPress={() => onFeedback?.('dislike')}
                                     className={`p-2 rounded-full border ${feedbackStatus === 'dislike' ? 'bg-red-500/20 border-red-500/50' : 'bg-white/5 border-white/5'}`}
                                 >
                                     <MaterialIcons name="thumb-down" size={16} color={feedbackStatus === 'dislike' ? '#f87171' : '#9ca3af'} />

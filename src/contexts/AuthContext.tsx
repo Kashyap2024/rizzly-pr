@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { supabase } from '../lib/supabase';
 import { User, Session } from '@supabase/supabase-js';
+import { historyService } from '../services/historyService';
 
 interface AuthContextType {
     user: User | null;
@@ -136,6 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setLoading(true);
             await GoogleSignin.signOut();
             await supabase.auth.signOut();
+            await historyService.clearHistory();
             setHasCompletedOnboarding(false);
             setProfile(null);
         } catch (error) {

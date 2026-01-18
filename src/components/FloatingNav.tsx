@@ -2,6 +2,9 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../types';
 
 interface NavItemProps {
     icon: keyof typeof MaterialIcons.glyphMap;
@@ -27,6 +30,9 @@ const NavItem: React.FC<NavItemProps> = ({ icon, label, isActive, onPress }) => 
 );
 
 export const FloatingNav: React.FC = () => {
+    const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    const route = useRoute();
+
     return (
         <View className="absolute bottom-12 left-0 right-0 px-12 z-20">
             <BlurView
@@ -45,9 +51,24 @@ export const FloatingNav: React.FC = () => {
                 }}
             >
                 <View className="flex-1 flex-row items-center justify-around">
-                    <NavItem icon="home" label="Home" isActive />
-                    <NavItem icon="bookmark-border" label="Saved" />
-                    <NavItem icon="person-outline" label="Profile" />
+                    <NavItem
+                        icon="home"
+                        label="Home"
+                        isActive={route.name === 'Home'}
+                        onPress={() => navigation.navigate('Home')}
+                    />
+                    <NavItem
+                        icon="history"
+                        label="History"
+                        isActive={route.name === 'History'}
+                        onPress={() => navigation.navigate('History')}
+                    />
+                    <NavItem
+                        icon="person-outline"
+                        label="Profile"
+                        isActive={route.name === 'Profile'}
+                        onPress={() => navigation.navigate('Profile')}
+                    />
                 </View>
             </BlurView>
         </View>

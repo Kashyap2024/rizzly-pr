@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, ScrollView, Image } from "react-native";
+import { View, Text, ScrollView, Image, TouchableOpacity } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -51,9 +51,12 @@ export default function HomeScreen() {
                             <Text className="text-lg font-space-bold text-white leading-none">{name}</Text>
                         </View>
                     </View>
-                    <View className="w-10 h-10 rounded-full items-center justify-center bg-white/5">
+                    <TouchableOpacity
+                        onPress={() => navigation.navigate("Settings")}
+                        className="w-10 h-10 rounded-full items-center justify-center bg-white/5 active:bg-white/10"
+                    >
                         <MaterialIcons name="settings" size={24} color="#9ca3af" />
-                    </View>
+                    </TouchableOpacity>
                 </View>
 
                 <ScrollView className="flex-1 px-6 pb-32" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 150 }}>

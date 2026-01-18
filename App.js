@@ -11,6 +11,9 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import PickupLineScreen from './src/screens/PickupLineScreen';
 import ReplyGeneratorScreen from './src/screens/ReplyGeneratorScreen';
+import HistoryScreen from './src/screens/HistoryScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 
@@ -59,6 +62,9 @@ function RootNavigator() {
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="PickupLine" component={PickupLineScreen} />
             <Stack.Screen name="ReplyGenerator" component={ReplyGeneratorScreen} />
+            <Stack.Screen name="History" component={HistoryScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
           </>
         ) : (
           // Authenticated but Profile Incomplete

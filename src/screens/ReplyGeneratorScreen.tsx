@@ -6,6 +6,7 @@ import { RootStackParamList } from "../types";
 import Background from "../components/Background";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from 'expo-image-picker';
+import { useAuth } from "../contexts/AuthContext";
 
 // Modular Components
 import { ScreenHeader } from "../components/ScreenHeader";
@@ -14,6 +15,13 @@ import { VibeSelector, Vibe } from "../components/VibeSelector";
 import { FlatterySlider } from "../components/FlatterySlider";
 import { ActionButton } from "../components/ActionButton";
 import { RizzCard } from "../components/RizzCard";
+import { apiService } from "../services/api";
+import { supabase } from "../lib/supabase";
+import { storageService } from "../services/storageService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useEffect } from "react";
+import { historyService } from "../services/historyService";
+import { sessionService } from "../services/sessionService";
 
 const VIBES: Vibe[] = [
     { id: 'default', label: 'Default', icon: 'auto-awesome' },
@@ -27,12 +35,39 @@ const VIBES: Vibe[] = [
 type Props = NativeStackScreenProps<RootStackParamList, 'ReplyGenerator'>;
 
 export default function ReplyGeneratorScreen({ navigation }: Props) {
+    const { profile, user } = useAuth();
     const [flatteryLevel, setFlatteryLevel] = useState(75);
     const [emojiMode, setEmojiMode] = useState<EmojiMode>('relevant');
     const [selectedVibe, setSelectedVibe] = useState('default');
     const [image, setImage] = useState<string | null>(null);
-    const [cardFeedback, setCardFeedback] = useState<{ [key: number]: 'like' | 'dislike' | null }>({});
-    const [showThankYou, setShowThankYou] = useState<{ [key: number]: boolean }>({});
+    const [cardFeedback, setCardFeedback] = useState<{ [key: string]: 'like' | 'dislike' | null }>({});
+    const [showThankYou, setShowThankYou] = useState<{ [key: string]: boolean }>({});
+    const [results, setResults] = useState<{ text: string, history_id: string, server_id: string }[]>(
+        sessionService.getResults('Reply Generator').map(r => ({ text: r.text, history_id: r.id, server_id: r.serverId }))
+    );
+    const [isLoading, setIsLoading] = useState(false);
+    const [overrideTargetGender, setOverrideTargetGender] = useState<string | null>(null);
+
+    const userGender = profile?.gender?.toLowerCase() || 'other';
+    const oppositeGender = overrideTargetGender || ((userGender === 'man' || userGender === 'male') ? 'Woman' : 'Man');
+
+    useEffect(() => {
+        const loadDefaults = async () => {
+            try {
+                const saved = await AsyncStorage.getItem('rizz_defaults');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (parsed.vibe) setSelectedVibe(parsed.vibe);
+                    if (parsed.flattery) setFlatteryLevel(parsed.flattery);
+                    if (parsed.emoji) setEmojiMode(parsed.emoji);
+                    if (parsed.targetGender) setOverrideTargetGender(parsed.targetGender);
+                }
+            } catch (e) {
+                console.error("Load defaults error", e);
+            }
+        };
+        loadDefaults();
+    }, []);
 
     const pickImage = async () => {
         let result = await ImagePicker.launchImageLibraryAsync({
@@ -47,12 +82,76 @@ export default function ReplyGeneratorScreen({ navigation }: Props) {
         }
     };
 
-    const handleFeedback = (id: number, type: 'like' | 'dislike') => {
-        setCardFeedback(prev => ({ ...prev, [id]: type }));
-        setShowThankYou(prev => ({ ...prev, [id]: true }));
+    const handleGenerate = async () => {
+        if (!image) return;
 
+        setIsLoading(true);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.access_token) throw new Error("Not authenticated");
+
+            // 1. Upload to Supabase Storage
+            const imagePath = await storageService.uploadChatScreenshot(image, user?.id || 'anonymous');
+
+            // 2. Format prompt
+            const formattedPrompt = `Give me reply for ${oppositeGender}
+- Flittering: ${flatteryLevel}%
+- Emoji: ${emojiMode}
+- Tone: ${selectedVibe}`;
+
+            // 3. Call AI Service
+            const res = await apiService.generateRizz({
+                type: 'ocr',
+                imagePath,
+                prompt: formattedPrompt
+            }, session.access_token);
+
+            // Save to local history
+            const localItem = await historyService.saveHistory({
+                text: res.rizz,
+                type: 'Reply Generator',
+                settings: {
+                    vibe: selectedVibe,
+                    flattery: flatteryLevel,
+                    emoji: emojiMode,
+                    targetGender: oppositeGender
+                }
+            });
+
+            // Save to session service
+            sessionService.addResult({
+                id: localItem.id,
+                serverId: res.history_id, // Store actual server ID
+                text: localItem.text,
+                type: 'Reply Generator'
+            });
+
+            setResults(prev => [{ text: localItem.text, history_id: localItem.id, server_id: res.history_id }, ...prev]);
+        } catch (error) {
+            console.error("OCR Generation failed:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleFeedback = async (serverId: string, localId: string, feedback: 'like' | 'dislike') => {
+        // UI state uses local mapping
+        setCardFeedback(prev => ({ ...prev, [localId]: feedback }));
+        setShowThankYou(prev => ({ ...prev, [localId]: true }));
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.access_token) {
+                // Backend uses real history_id
+                await apiService.provideFeedback(serverId, feedback, session.access_token);
+            }
+        } catch (error) {
+            console.error("Feedback failed:", error);
+        }
+
+        // Auto-hide thank you message after 2 seconds
         setTimeout(() => {
-            setShowThankYou(prev => ({ ...prev, [id]: false }));
+            setShowThankYou(prev => ({ ...prev, [localId]: false }));
         }, 2000);
     };
 
@@ -115,35 +214,35 @@ export default function ReplyGeneratorScreen({ navigation }: Props) {
 
                 {/* Results Section */}
                 <View className="space-y-4 gap-4 animate-fade-in-up">
-                    <View className="flex-row items-center justify-between px-1">
-                        <Text className="text-sm font-bold text-white">AI Suggestions</Text>
-                        <View className="bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
-                            <Text className="text-xs text-primary">3 generated</Text>
+                    {results.length > 0 && (
+                        <View className="flex-row items-center justify-between px-1">
+                            <Text className="text-sm font-bold text-white">AI Suggestions</Text>
+                            <View className="bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                                <Text className="text-xs text-primary">{results.length} generated</Text>
+                            </View>
                         </View>
-                    </View>
+                    )}
 
-                    <RizzCard
-                        text="I was going to use a cheesy pickup line, but your bio is already funnier than anything I could come up with. 😂"
-                        onCopy={() => { }}
-                        feedbackStatus={cardFeedback[0]}
-                        showThankYou={showThankYou[0]}
-                        onFeedback={(type) => handleFeedback(0, type)}
-                    />
-
-                    <RizzCard
-                        text="Is your name Wi-Fi? Because I'm feeling a really strong connection right now. 📶"
-                        onCopy={() => { }}
-                        feedbackStatus={cardFeedback[1]}
-                        showThankYou={showThankYou[1]}
-                        onFeedback={(type) => handleFeedback(1, type)}
-                    />
+                    {results.map((result, index) => (
+                        <RizzCard
+                            key={result.history_id}
+                            text={result.text}
+                            onCopy={() => { }}
+                            feedbackStatus={cardFeedback[result.history_id]}
+                            showThankYou={showThankYou[result.history_id]}
+                            onFeedback={(type) => handleFeedback(result.server_id, result.history_id, type)}
+                        />
+                    ))}
                 </View>
 
             </ScrollView>
 
             {/* Bottom Generate Button */}
             <View className="absolute bottom-0 left-0 right-0 p-5 pt-10 pb-8 bg-gradient-to-t from-background-dark via-background-dark/95 to-transparent z-30">
-                <ActionButton label="Generate Reply" onPress={() => { }} />
+                <ActionButton
+                    label={isLoading ? "Analyzing..." : "Generate Reply"}
+                    onPress={handleGenerate}
+                />
             </View>
 
         </View>
