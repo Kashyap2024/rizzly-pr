@@ -3,6 +3,7 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 import { supabase } from '../lib/supabase';
 import { User, Session } from '@supabase/supabase-js';
 import { historyService } from '../services/historyService';
+import { useUser } from 'expo-superwall';
 
 interface AuthContextType {
     user: User | null;
@@ -23,6 +24,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
     const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
     const [profile, setProfile] = useState<{ display_name: string; gender: string } | null>(null);
+    const { identify, update, signOut: superwallSignOut } = useUser();
 
     const checkProfile = async (userId: string) => {
         try {
@@ -33,12 +35,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .single();
 
             if (error) {
-                console.log('Profile fetch error (possibly new user):', error.message);
                 return false;
             }
 
             const complete = !!(data?.display_name && data?.gender);
             setHasCompletedOnboarding(complete);
+
             if (complete) {
                 setProfile({ display_name: data.display_name, gender: data.gender });
             } else {
@@ -46,7 +48,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             return complete;
         } catch (err) {
-            console.error('Error checking profile:', err);
+            console.error('[AuthContext] Error checking profile:', err);
             return false;
         }
     };
@@ -69,15 +71,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Initial session check
         const initializeAuth = async () => {
             setLoading(true);
-            const { data: { session } } = await supabase.auth.getSession();
-            setSession(session);
-            setUser(session?.user ?? null);
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                setSession(session);
+                setUser(session?.user ?? null);
 
-            if (session?.user) {
-                await checkProfile(session.user.id);
+                if (session?.user) {
+                    await checkProfile(session.user.id);
+                }
+            } catch (err) {
+                console.error('Initialization error:', err);
+            } finally {
+                setLoading(false);
             }
-
-            setLoading(false);
         };
 
         initializeAuth();
@@ -102,6 +108,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, []);
 
+    // Superwall Sync Effect
+    useEffect(() => {
+        if (loading) return; // Wait for initial auth load
+
+        if (user) {
+            identify(user.id);
+
+            if (profile) {
+                update({
+                    display_name: profile.display_name,
+                    gender: profile.gender,
+                    onboarding_status: true
+                });
+            } else if (!hasCompletedOnboarding) {
+                update({ onboarding_status: false });
+            }
+        }
+    }, [user, profile, loading]);
+
     const signInWithGoogle = async () => {
         try {
             setLoading(true);
@@ -123,6 +148,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (error) throw error;
 
             if (data.user) {
+                console.log('[Superwall] Identifying user:', data.user.id);
+                identify(data.user.id);
                 await checkProfile(data.user.id);
             }
         } catch (error: any) {
@@ -138,6 +165,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await GoogleSignin.signOut();
             await supabase.auth.signOut();
             await historyService.clearHistory();
+            superwallSignOut();
             setHasCompletedOnboarding(false);
             setProfile(null);
         } catch (error) {

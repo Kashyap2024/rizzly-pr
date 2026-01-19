@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { TypewriterText } from './TypewriterText';
 
 export interface RizzCardProps {
     text: string;
@@ -8,6 +9,7 @@ export interface RizzCardProps {
     feedbackStatus?: 'like' | 'dislike' | null;
     showThankYou?: boolean;
     onFeedback?: (type: 'like' | 'dislike') => void;
+    animate?: boolean;
 }
 
 export const RizzCard: React.FC<RizzCardProps> = ({
@@ -15,7 +17,8 @@ export const RizzCard: React.FC<RizzCardProps> = ({
     onCopy,
     feedbackStatus,
     showThankYou,
-    onFeedback
+    onFeedback,
+    animate = false
 }) => {
     return (
         <TouchableOpacity
@@ -24,9 +27,17 @@ export const RizzCard: React.FC<RizzCardProps> = ({
         >
             <View className="flex-col gap-4">
                 <View className="flex-row justify-between items-start gap-3">
-                    <Text className="text-sm leading-relaxed text-gray-200 flex-1 font-space-regular">
-                        {text}
-                    </Text>
+                    {animate ? (
+                        <TypewriterText
+                            text={text}
+                            speed={15}
+                            className="text-sm leading-relaxed text-gray-200 flex-1 font-space-regular"
+                        />
+                    ) : (
+                        <Text className="text-sm leading-relaxed text-gray-200 flex-1 font-space-regular">
+                            {text}
+                        </Text>
+                    )}
                     <TouchableOpacity
                         onPress={onCopy}
                         className="shrink-0 p-2 rounded-lg bg-white/5 active:bg-primary/20"

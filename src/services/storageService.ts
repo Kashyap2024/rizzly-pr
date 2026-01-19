@@ -1,5 +1,5 @@
 import { decode } from 'base64-arraybuffer';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../lib/supabase';
 
 const BUCKET_NAME = process.env.EXPO_PUBLIC_SUPABASE_BUCKET_NAME || 'chat-screenshots';

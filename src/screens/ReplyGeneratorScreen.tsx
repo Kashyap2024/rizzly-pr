@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView, Image } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, Image, Alert } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../types";
@@ -7,6 +7,8 @@ import Background from "../components/Background";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from "../contexts/AuthContext";
+import { LastFreeRizzModal } from "../components/LastFreeRizzModal";
+import { TrialExhaustedModal } from "../components/TrialExhaustedModal";
 
 // Modular Components
 import { ScreenHeader } from "../components/ScreenHeader";
@@ -22,6 +24,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect } from "react";
 import { historyService } from "../services/historyService";
 import { sessionService } from "../services/sessionService";
+import { RizzSkeleton } from "../components/RizzSkeleton";
+import { usePlacement } from "expo-superwall";
 
 const VIBES: Vibe[] = [
     { id: 'default', label: 'Default', icon: 'auto-awesome' },
@@ -46,10 +50,16 @@ export default function ReplyGeneratorScreen({ navigation }: Props) {
         sessionService.getResults('Reply Generator').map(r => ({ text: r.text, history_id: r.id, server_id: r.serverId }))
     );
     const [isLoading, setIsLoading] = useState(false);
+    const [isLastFree, setIsLastFree] = useState(false);
+    const [isTrialExhausted, setIsTrialExhausted] = useState(false);
+    const [showLastFreeModal, setShowLastFreeModal] = useState(false);
+    const [showTrialExhaustedModal, setShowTrialExhaustedModal] = useState(false);
+    const [animatingId, setAnimatingId] = useState<string | null>(null);
+    const { registerPlacement } = usePlacement();
     const [overrideTargetGender, setOverrideTargetGender] = useState<string | null>(null);
 
     const userGender = profile?.gender?.toLowerCase() || 'other';
-    const oppositeGender = overrideTargetGender || ((userGender === 'man' || userGender === 'male') ? 'Woman' : 'Man');
+    const oppositeGender = overrideTargetGender || ((userGender === 'man' || userGender === 'male') ? 'Female' : 'Male');
 
     useEffect(() => {
         const loadDefaults = async () => {
@@ -85,28 +95,58 @@ export default function ReplyGeneratorScreen({ navigation }: Props) {
     const handleGenerate = async () => {
         if (!image) return;
 
+        if (isTrialExhausted) {
+            setShowTrialExhaustedModal(true);
+            return;
+        }
+
+        if (isLastFree) {
+            setShowLastFreeModal(true);
+            return;
+        }
+
+        await performGeneration();
+    };
+
+    const handleUpgrade = () => {
+        setShowTrialExhaustedModal(false);
+        registerPlacement({ placement: 'reach_limit' });
+    };
+
+    const handleConfirmedGenerate = async () => {
+        setShowLastFreeModal(false);
+        await performGeneration();
+    };
+
+    const performGeneration = async () => {
+        if (!image) return;
+
         setIsLoading(true);
         try {
             const { data: { session } } = await supabase.auth.getSession();
-            if (!session?.access_token) throw new Error("Not authenticated");
+            if (!session?.access_token) return;
 
-            // 1. Upload to Supabase Storage
+            // 1. Upload image to Supabase
             const imagePath = await storageService.uploadChatScreenshot(image, user?.id || 'anonymous');
 
-            // 2. Format prompt
-            const formattedPrompt = `Give me reply for ${oppositeGender}
-- Flittering: ${flatteryLevel}%
-- Emoji: ${emojiMode}
+            // 2. Format context prompt
+            const prompt = `Give me reply for ${oppositeGender}
+- Flattery: ${flatteryLevel}%
+- Emoji: ${emojiMode === 'relevant' ? 'Relevant' : emojiMode === 'on' ? 'On' : 'Off'}
 - Tone: ${selectedVibe}`;
 
-            // 3. Call AI Service
+            // 3. Call AI API
             const res = await apiService.generateRizz({
                 type: 'ocr',
-                imagePath,
-                prompt: formattedPrompt
+                prompt,
+                imagePath
             }, session.access_token);
 
-            // Save to local history
+            if (res.is_last_free_rizz) {
+                setIsLastFree(true);
+            }
+
+            // 4. Save to local history
             const localItem = await historyService.saveHistory({
                 text: res.rizz,
                 type: 'Reply Generator',
@@ -126,9 +166,17 @@ export default function ReplyGeneratorScreen({ navigation }: Props) {
                 type: 'Reply Generator'
             });
 
+            setAnimatingId(localItem.id);
             setResults(prev => [{ text: localItem.text, history_id: localItem.id, server_id: res.history_id }, ...prev]);
-        } catch (error) {
+        } catch (error: any) {
             console.error("OCR Generation failed:", error);
+            if (error.status === 402) {
+                console.log('[Superwall] 402 Error detected, showing trial exhausted modal');
+                setIsTrialExhausted(true);
+                setShowTrialExhaustedModal(true);
+            } else {
+                Alert.alert("Error", error.message || "Something went wrong. Please try again.");
+            }
         } finally {
             setIsLoading(false);
         }
@@ -176,7 +224,7 @@ export default function ReplyGeneratorScreen({ navigation }: Props) {
                         className="relative w-full h-56 rounded-[2rem] border-2 border-dashed border-white/10 bg-surface-dark flex-col items-center justify-center gap-4 overflow-hidden active:bg-surface-dark/80"
                     >
                         {image ? (
-                            <Image source={{ uri: image }} className="absolute inset-0 w-full h-full" resizeMode="cover" />
+                            <Image source={{ uri: image }} className="absolute inset-0 w-full h-full" resizeMode="contain" />
                         ) : (
                             <>
                                 <View className="w-16 h-16 rounded-full bg-primary/20 items-center justify-center">
@@ -213,7 +261,7 @@ export default function ReplyGeneratorScreen({ navigation }: Props) {
                 </View>
 
                 {/* Results Section */}
-                <View className="space-y-4 gap-4 animate-fade-in-up">
+                <View className="space-y-4 gap-4 pb-6 animate-fade-in-up">
                     {results.length > 0 && (
                         <View className="flex-row items-center justify-between px-1">
                             <Text className="text-sm font-bold text-white">AI Suggestions</Text>
@@ -223,6 +271,8 @@ export default function ReplyGeneratorScreen({ navigation }: Props) {
                         </View>
                     )}
 
+                    {isLoading && <RizzSkeleton />}
+
                     {results.map((result, index) => (
                         <RizzCard
                             key={result.history_id}
@@ -231,6 +281,7 @@ export default function ReplyGeneratorScreen({ navigation }: Props) {
                             feedbackStatus={cardFeedback[result.history_id]}
                             showThankYou={showThankYou[result.history_id]}
                             onFeedback={(type) => handleFeedback(result.server_id, result.history_id, type)}
+                            animate={animatingId === result.history_id}
                         />
                     ))}
                 </View>
@@ -242,9 +293,22 @@ export default function ReplyGeneratorScreen({ navigation }: Props) {
                 <ActionButton
                     label={isLoading ? "Analyzing..." : "Generate Reply"}
                     onPress={handleGenerate}
+                    isLoading={isLoading}
+                    disabled={!image && !isLoading}
                 />
             </View>
 
+            <LastFreeRizzModal
+                visible={showLastFreeModal}
+                onClose={() => setShowLastFreeModal(false)}
+                onConfirm={handleConfirmedGenerate}
+            />
+
+            <TrialExhaustedModal
+                visible={showTrialExhaustedModal}
+                onClose={() => setShowTrialExhaustedModal(false)}
+                onUpgrade={handleUpgrade}
+            />
         </View>
     );
 }

@@ -43,7 +43,9 @@ class ApiService {
             } catch (e) {
                 errorData = { message: `Request failed with status ${response.status}. Response was not JSON.` };
             }
-            throw new Error(errorData.message || `Request failed with status ${response.status}`);
+            const error = new Error(errorData.message || `Request failed with status ${response.status}`);
+            (error as any).status = response.status;
+            throw error;
         }
 
         try {
@@ -55,7 +57,11 @@ class ApiService {
     }
 
     async generateRizz(params: GenerateRizzParams, token: string): Promise<GenerateRizzResponse> {
-        return this.request<GenerateRizzResponse>('/generate-rizz', 'POST', params, token);
+        const res = await this.request<GenerateRizzResponse>('/generate-rizz', 'POST', params, token);
+        return {
+            ...res,
+            rizz: res.rizz?.trim() || ''
+        };
     }
 
     async provideFeedback(history_id: string, feedback: 'like' | 'dislike', token: string): Promise<FeedbackResponse> {

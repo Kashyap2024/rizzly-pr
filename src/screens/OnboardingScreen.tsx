@@ -20,9 +20,17 @@ export default function OnboardingScreen() {
     const { signInWithGoogle, user, refreshProfile } = useAuth();
     const [selectedGender, setSelectedGender] = useState<string | null>(null);
     const [name, setName] = useState("");
-    const [currentStep, setCurrentStep] = useState<'auth' | 'gender' | 'name'>('auth');
+    const [currentStep, setCurrentStep] = useState<'auth' | 'gender' | 'name'>(user ? 'gender' : 'auth');
     const [isSaving, setIsSaving] = useState(false);
     const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+    // Handle auto-transition when user logs in
+    React.useEffect(() => {
+        if (user && currentStep === 'auth') {
+            setCurrentStep('gender');
+            progress.value = withTiming(0.66, { duration: 500 });
+        }
+    }, [user]);
 
     const progress = useSharedValue(0.33);
     const animatedProgressStyle = useAnimatedStyle(() => ({
@@ -84,7 +92,7 @@ export default function OnboardingScreen() {
 
     return (
         <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "padding"}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={{ flex: 1 }}
         >
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -203,7 +211,7 @@ export default function OnboardingScreen() {
                                     <Animated.View
                                         entering={FadeInLeft.duration(400)}
                                         exiting={FadeOutRight.duration(400)}
-                                        className="w-full"
+                                        className="w-full mb-12"
                                     >
                                         <TouchableOpacity
                                             onPress={() => {

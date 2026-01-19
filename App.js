@@ -14,8 +14,10 @@ import ReplyGeneratorScreen from './src/screens/ReplyGeneratorScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import { CoolLoadingScreen } from './src/components/CoolLoadingScreen';
 
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { SuperwallProvider, useUser, SuperwallLoaded } from "expo-superwall";
 
 const Stack = createNativeStackNavigator();
 
@@ -36,11 +38,7 @@ function RootNavigator() {
   const { user, loading, hasCompletedOnboarding } = useAuth();
 
   if (loading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#191022', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#7f13ec" />
-      </View>
-    );
+    return <CoolLoadingScreen />;
   }
 
   return (
@@ -94,14 +92,24 @@ export default function App() {
   }
 
   return (
-    <AuthProvider>
-      <SafeAreaProvider>
-        <View style={{ flex: 1, backgroundColor: '#191022' }}>
-          <NavigationContainer theme={Theme}>
-            <RootNavigator />
-          </NavigationContainer>
-        </View>
-      </SafeAreaProvider>
-    </AuthProvider>
+    <SuperwallProvider
+      apiKeys={{
+        ios: "pk_cMCmT2-AZMn-zQv5h7Qhk",
+        android: "pk_cMCmT2-AZMn-zQv5h7Qhk"
+      }}
+      onConfigurationError={(error) => console.error('[Superwall] Config Error:', error)}
+    >
+      <SuperwallLoaded>
+        <AuthProvider>
+          <SafeAreaProvider>
+            <View style={{ flex: 1, backgroundColor: '#191022' }}>
+              <NavigationContainer theme={Theme}>
+                <RootNavigator />
+              </NavigationContainer>
+            </View>
+          </SafeAreaProvider>
+        </AuthProvider>
+      </SuperwallLoaded>
+    </SuperwallProvider>
   );
 }

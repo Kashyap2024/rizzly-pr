@@ -13,6 +13,8 @@ import { FlatterySlider } from "../components/FlatterySlider";
 import { EmojiSelector, EmojiMode } from "../components/EmojiSelector";
 import { ActionButton } from "../components/ActionButton";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { usePlacement, useUser } from "expo-superwall";
+import { LinearGradient } from "expo-linear-gradient";
 
 const VIBES: Vibe[] = [
     { id: 'default', label: 'Default', icon: 'auto-awesome' },
@@ -25,12 +27,14 @@ const VIBES: Vibe[] = [
 
 export default function SettingsScreen() {
     const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    const { registerPlacement } = usePlacement();
+    const { user: superwallUser } = useUser();
 
     // AI Intelligence Defaults State
     const [defaultVibe, setDefaultVibe] = useState('default');
     const [defaultFlattery, setDefaultFlattery] = useState(75);
     const [defaultEmoji, setDefaultEmoji] = useState<EmojiMode>('relevant');
-    const [targetGender, setTargetGender] = useState<'Woman' | 'Man' | 'Other'>('Woman');
+    const [targetGender, setTargetGender] = useState<'Female' | 'Male' | 'Other'>('Female');
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
@@ -45,7 +49,11 @@ export default function SettingsScreen() {
                 setDefaultVibe(parsed.vibe || 'default');
                 setDefaultFlattery(parsed.flattery || 75);
                 setDefaultEmoji(parsed.emoji || 'relevant');
-                setTargetGender(parsed.targetGender || 'Woman');
+                // Support legacy mapping if needed, but standardize to Female/Male
+                let gender = parsed.targetGender || 'Female';
+                if (gender === 'Woman') gender = 'Female';
+                if (gender === 'Man') gender = 'Male';
+                setTargetGender(gender as any);
             }
         } catch (error) {
             console.error('Failed to load settings', error);
@@ -73,6 +81,7 @@ export default function SettingsScreen() {
         }
     };
 
+
     return (
         <View className="flex-1 bg-background-dark relative">
             <StatusBar style="light" />
@@ -89,6 +98,35 @@ export default function SettingsScreen() {
                 contentContainerStyle={{ paddingBottom: 150 }}
                 showsVerticalScrollIndicator={false}
             >
+                {/* Premium Card */}
+                <TouchableOpacity
+                    onPress={() => registerPlacement({ placement: 'settings_premium_cad' })}
+                    activeOpacity={0.9}
+                    className="mb-8"
+                >
+                    <LinearGradient
+                        colors={['#7f13ec', '#9f4bf6']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        className="rounded-3xl p-6 relative overflow-hidden flex-row items-center border border-white/20"
+                    >
+                        {/* Decorative Background Icon */}
+                        <View className="absolute -right-4 -bottom-4 opacity-10">
+                            <MaterialIcons name="auto-awesome" size={100} color="white" />
+                        </View>
+
+                        <View className="flex-1">
+                            <View className="bg-white/20 self-start px-2 py-0.5 rounded-full mb-2">
+                                <Text className="text-white text-[10px] font-space-bold uppercase tracking-wider">Limited Offer</Text>
+                            </View>
+                            <Text className="text-white text-xl font-space-bold mb-1">Rizzly Pro</Text>
+                            <Text className="text-white/80 text-xs font-space-medium">Unlock unlimited generations, premium vibes, and OCR analysis.</Text>
+                        </View>
+                        <View className="bg-white rounded-2xl p-2 ml-4">
+                            <MaterialIcons name="arrow-forward" size={20} color="#7f13ec" />
+                        </View>
+                    </LinearGradient>
+                </TouchableOpacity>
                 <View className="mb-8">
                     <View className="flex-row items-center gap-2 mb-4 px-1">
                         <MaterialIcons name="psychology" size={20} color="#9f4bf6" />
@@ -99,7 +137,7 @@ export default function SettingsScreen() {
                     <View className="bg-surface-dark/50 rounded-3xl p-5 border border-white/5 mb-6">
                         <Text className="text-gray-400 text-xs font-space-bold uppercase tracking-widest mb-4">Target Audience</Text>
                         <View className="flex-row gap-3">
-                            {['Woman', 'Man', 'Other'].map((g) => (
+                            {['Female', 'Male', 'Other'].map((g) => (
                                 <TouchableOpacity
                                     key={g}
                                     onPress={() => setTargetGender(g as any)}

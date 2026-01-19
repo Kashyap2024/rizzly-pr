@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { View, Text, ScrollView, TextInput, NativeSyntheticEvent, TextInputScrollEventData } from "react-native";
+import { View, Text, ScrollView, TextInput, NativeSyntheticEvent, TextInputScrollEventData, Alert } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../types";
@@ -14,11 +14,15 @@ import { VibeSelector, Vibe } from "../components/VibeSelector";
 import { FlatterySlider } from "../components/FlatterySlider";
 import { ActionButton } from "../components/ActionButton";
 import { RizzCard } from "../components/RizzCard";
+import { LastFreeRizzModal } from "../components/LastFreeRizzModal";
+import { TrialExhaustedModal } from "../components/TrialExhaustedModal";
 import { apiService } from "../services/api";
 import { supabase } from "../lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { historyService } from "../services/historyService";
 import { sessionService } from "../services/sessionService";
+import { RizzSkeleton } from "../components/RizzSkeleton";
+import { usePlacement } from "expo-superwall";
 
 const VIBES: Vibe[] = [
     { id: 'default', label: 'Default', icon: 'auto-awesome' },
@@ -59,6 +63,13 @@ export default function PickupLineScreen({ navigation }: Props) {
         sessionService.getResults('Pickup Line').map(r => ({ text: r.text, history_id: r.id, server_id: r.serverId }))
     );
     const [isLoading, setIsLoading] = useState(false);
+    const [isLastFree, setIsLastFree] = useState(false);
+    const [isTrialExhausted, setIsTrialExhausted] = useState(false);
+    const [showLastFreeModal, setShowLastFreeModal] = useState(false);
+    const [showTrialExhaustedModal, setShowTrialExhaustedModal] = useState(false);
+    const [animatingId, setAnimatingId] = useState<string | null>(null);
+
+    const { registerPlacement } = usePlacement();
 
     // Scrollbar state
     const [contentHeight, setContentHeight] = useState(0);
@@ -67,7 +78,7 @@ export default function PickupLineScreen({ navigation }: Props) {
     const [overrideTargetGender, setOverrideTargetGender] = useState<string | null>(null);
 
     const userGender = profile?.gender?.toLowerCase() || 'other';
-    const oppositeGender = overrideTargetGender || ((userGender === 'man' || userGender === 'male') ? 'Woman' : 'Man');
+    const oppositeGender = overrideTargetGender || ((userGender === 'man' || userGender === 'male') ? 'Female' : 'Male');
 
     useEffect(() => {
         const loadDefaults = async () => {
@@ -123,21 +134,51 @@ export default function PickupLineScreen({ navigation }: Props) {
     const handleGenerate = async () => {
         if (!context.trim()) return;
 
+        if (isTrialExhausted) {
+            setShowTrialExhaustedModal(true);
+            return;
+        }
+
+        if (isLastFree) {
+            setShowLastFreeModal(true);
+            return;
+        }
+
+        await performGeneration();
+    };
+
+    const handleUpgrade = () => {
+        setShowTrialExhaustedModal(false);
+        registerPlacement({ placement: 'reach_limit' });
+    };
+
+    const handleConfirmedGenerate = async () => {
+        setShowLastFreeModal(false);
+        await performGeneration();
+    };
+
+    const performGeneration = async () => {
+        if (!context.trim()) return;
+
         setIsLoading(true);
         try {
             const { data: { session } } = await supabase.auth.getSession();
-            if (!session?.access_token) throw new Error("Not authenticated");
+            if (!session?.access_token) throw new Error("No session found");
 
-            const formattedPrompt = `Person Description: ${context}
+            const prompt = `Person Description: ${context}
 Give me reply for ${oppositeGender}
 - Flittering: ${flatteryLevel}%
-- Emoji: ${emojiMode}
+- Emoji: ${emojiMode === 'relevant' ? 'Relevant' : emojiMode === 'on' ? 'On' : 'Off'}
 - Tone: ${selectedVibe}`;
 
             const res = await apiService.generateRizz({
                 type: 'text',
-                prompt: formattedPrompt
+                prompt
             }, session.access_token);
+
+            if (res.is_last_free_rizz) {
+                setIsLastFree(true);
+            }
 
             // Save to local history
             const localItem = await historyService.saveHistory({
@@ -147,7 +188,7 @@ Give me reply for ${oppositeGender}
                     vibe: selectedVibe,
                     flattery: flatteryLevel,
                     emoji: emojiMode,
-                    targetGender: oppositeGender
+                    targetGender: profile?.gender === 'Male' ? 'Female' : 'Male'
                 }
             });
 
@@ -159,10 +200,17 @@ Give me reply for ${oppositeGender}
                 type: 'Pickup Line'
             });
 
+            setAnimatingId(localItem.id);
             setResults(prev => [{ text: localItem.text, history_id: localItem.id, server_id: res.history_id }, ...prev]);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Generation failed:", error);
-            // Add error toast or message here
+            if (error.status === 402) {
+                console.log('[Superwall] 402 Error detected, showing trial exhausted modal');
+                setIsTrialExhausted(true);
+                setShowTrialExhaustedModal(true);
+            } else {
+                Alert.alert("Error", error.message || "Something went wrong. Please try again.");
+            }
         } finally {
             setIsLoading(false);
         }
@@ -281,8 +329,10 @@ Give me reply for ${oppositeGender}
 
                 {/* Generate Button */}
                 <ActionButton
-                    label={isLoading ? "Generating..." : "Generate Rizz"}
+                    label={isLoading ? "Generating Magic..." : "Generate Rizz"}
                     onPress={handleGenerate}
+                    isLoading={isLoading}
+                    disabled={context.trim().split(/\s+/).filter(word => word.length > 0).length < 2}
                 />
 
                 {/* Results Section */}
@@ -296,6 +346,8 @@ Give me reply for ${oppositeGender}
                         </View>
                     )}
 
+                    {isLoading && <RizzSkeleton />}
+
                     {results.map((result, index) => (
                         <RizzCard
                             key={result.history_id}
@@ -304,11 +356,24 @@ Give me reply for ${oppositeGender}
                             feedbackStatus={cardFeedback[result.history_id]}
                             showThankYou={showThankYou[result.history_id]}
                             onFeedback={(type) => handleFeedback(result.server_id, result.history_id, type)}
+                            animate={animatingId === result.history_id}
                         />
                     ))}
                 </View>
 
             </ScrollView>
+
+            <LastFreeRizzModal
+                visible={showLastFreeModal}
+                onClose={() => setShowLastFreeModal(false)}
+                onConfirm={handleConfirmedGenerate}
+            />
+
+            <TrialExhaustedModal
+                visible={showTrialExhaustedModal}
+                onClose={() => setShowTrialExhaustedModal(false)}
+                onUpgrade={handleUpgrade}
+            />
         </View>
     );
 }

@@ -34,7 +34,7 @@ export const FloatingNav: React.FC = () => {
     const route = useRoute();
 
     return (
-        <View className="absolute bottom-12 left-0 right-0 px-12 z-20">
+        <View className="absolute bottom-24 left-0 right-0 px-12 z-20">
             <BlurView
                 intensity={50}
                 tint="dark"
