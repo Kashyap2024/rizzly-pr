@@ -59,7 +59,7 @@ export default function ReplyGeneratorScreen({ navigation }: Props) {
     const [overrideTargetGender, setOverrideTargetGender] = useState<string | null>(null);
 
     const userGender = profile?.gender?.toLowerCase() || 'other';
-    const oppositeGender = overrideTargetGender || ((userGender === 'man' || userGender === 'male') ? 'Female' : 'Male');
+    const oppositeGender = overrideTargetGender || ((userGender === 'man' || userGender === 'male') ? 'Woman' : 'Man');
 
     useEffect(() => {
         const loadDefaults = async () => {

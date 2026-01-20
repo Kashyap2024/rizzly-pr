@@ -34,7 +34,7 @@ export default function SettingsScreen() {
     const [defaultVibe, setDefaultVibe] = useState('default');
     const [defaultFlattery, setDefaultFlattery] = useState(75);
     const [defaultEmoji, setDefaultEmoji] = useState<EmojiMode>('relevant');
-    const [targetGender, setTargetGender] = useState<'Female' | 'Male' | 'Other'>('Female');
+    const [targetGender, setTargetGender] = useState<'Woman' | 'Man' | 'Other'>('Woman');
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
@@ -49,10 +49,10 @@ export default function SettingsScreen() {
                 setDefaultVibe(parsed.vibe || 'default');
                 setDefaultFlattery(parsed.flattery || 75);
                 setDefaultEmoji(parsed.emoji || 'relevant');
-                // Support legacy mapping if needed, but standardize to Female/Male
-                let gender = parsed.targetGender || 'Female';
-                if (gender === 'Woman') gender = 'Female';
-                if (gender === 'Man') gender = 'Male';
+                // Support legacy mapping
+                let gender = parsed.targetGender || 'Woman';
+                if (gender === 'Female') gender = 'Woman';
+                if (gender === 'Male') gender = 'Man';
                 setTargetGender(gender as any);
             }
         } catch (error) {
@@ -137,7 +137,7 @@ export default function SettingsScreen() {
                     <View className="bg-surface-dark/50 rounded-3xl p-5 border border-white/5 mb-6">
                         <Text className="text-gray-400 text-xs font-space-bold uppercase tracking-widest mb-4">Target Audience</Text>
                         <View className="flex-row gap-3">
-                            {['Female', 'Male', 'Other'].map((g) => (
+                            {['Woman', 'Man', 'Other'].map((g) => (
                                 <TouchableOpacity
                                     key={g}
                                     onPress={() => setTargetGender(g as any)}
